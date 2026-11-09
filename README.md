@@ -65,7 +65,7 @@ $ sudo curl -fsSL https://sirredbeard.github.io/edge-arm-bridge/edge-arm-bridge.
 $ sudo dnf install edge-arm-bridge
 ```
 
-The stream is unsigned, so the .repo file sets gpgcheck=0. Install puts the service, FEX, and the Edge image in /usr/lib/edge-arm-bridge and joins the image parts at install time (Pages caps one file at 100 MB, so the image ships split across subpackages that the main package pulls in). Two desktop entries land with it: Microsoft Edge, which opens the sign-in window under FEX, and Edge Sync Settings, a small GTK app that edits the same config, runs syncs, and toggles the six-hour wake timer. Profiles and config live in the user's home, same as the tar install. The bundled Chromium is not in the RPM set: point chromiumBinaryPath at the system Chromium or Chrome.
+The stream is unsigned, so the .repo file sets gpgcheck=0. Install puts the service, FEX, and the Edge image in /usr/lib/edge-arm-bridge and joins the image parts at install time (Pages caps one file at 100 MB, so the image ships split across subpackages that the main package pulls in). Two desktop entries land with it: Microsoft Edge, which opens the sign-in window under FEX, and Edge Sync Settings, a small GTK app whose first screen walks a first run from sign-in to first mirror to an open Chromium window, and after that edits the same config, runs syncs, and toggles the six-hour wake timer. Profiles and config live in the user's home, same as the tar install. The bundled Chromium is not in the RPM set: point chromiumBinaryPath at the system Chromium or Chrome.
 
 To build a fresh bundle with the newest FEX, Edge stable, and Chromium:
 
