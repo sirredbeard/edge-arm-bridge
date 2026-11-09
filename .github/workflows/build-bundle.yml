@@ -1,46 +1,51 @@
-# Rebuild the bundle with the newest FEX, Edge stable, and Chrome for
-# Testing, and publish it as a release asset.
+# Build the bundle with the newest FEX, the newest Edge stable, and the
+# newest Chrome for Testing, and attach it to a release.
 #
-# Status: scaffold. The steps mirror packaging/build-bundle.sh, which is
-# tested on the VENTUNO Q. The workflow itself has not run in CI yet, and
-# the first runs should be manual dispatches watched by a human.
+# The flow: publish a release (a draft is fine), and this workflow builds
+# the bundle from the latest upstream versions and uploads
+# edge-arm-bridge.tar.gz and it's sha256 to that release. Publishing the
+# release after the build is the tidy order, since edge-arm-bridge.sh
+# --install always pulls the newest published release and expects the
+# bundle asset to be there. A manual dispatch against an existing tag
+# rebuilds and replaces that release's bundle, which is how v0.1.0 was
+# refreshed.
+#
+# All of the build logic lives in packaging/build-bundle.sh, tested on
+# the VENTUNO Q. This file only sets up the runner and calls it.
 name: build-bundle
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
-  schedule:
-    # Weekly, Monday 06:17 UTC. Edge and Chrome ship on roughly a four week
-    # cycle, so weekly is often a no-change rebuild. The version check in
-    # build-bundle.sh keeps the majors paired either way.
-    - cron: "17 6 * * 1"
+    inputs:
+      release_tag:
+        description: "Release tag to upload the bundle to"
+        required: true
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "11.0.x"
-      - name: Add the FEX PPA for download only
+      - name: Install build tools and add the FEX PPA for download only
         run: |
           sudo apt-get update
-          sudo apt-get install -y software-properties-common
+          sudo apt-get install -y software-properties-common squashfs-tools patchelf curl unzip python3
           sudo add-apt-repository -y ppa:fex-emu/fex
           sudo apt-get update
       - name: Build the bundle
-        run: ./packaging/build-bundle.sh
-      - name: Upload the bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: edge-arm-bridge-bundle
-          path: |
-            build/edge-arm-bridge.tar.gz
-            build/edge-arm-bridge.tar.gz.sha256
-      - name: Attach to a release when dispatched on a tag
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            build/edge-arm-bridge.tar.gz
-            build/edge-arm-bridge.tar.gz.sha256
+        run: bash packaging/build-bundle.sh
+      - name: Upload the bundle to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.release_tag }}"
+          gh release upload "$TAG" build/edge-arm-bridge.tar.gz build/edge-arm-bridge.tar.gz.sha256 edge-arm-bridge.sh --clobber
