@@ -66,7 +66,7 @@ jobs:
           version="${RELEASE_TAG#v}"
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/repo" \
-            -v "$GITHUB_WORKSPACE/dist/edge-arm-bridge:/bundle:ro" \
+            -v "$GITHUB_WORKSPACE/dist/bundle:/bundle:ro" \
             -v "$GITHUB_WORKSPACE/dist/gui:/gui:ro" \
             -v "$GITHUB_WORKSPACE/dist/rpms:/out" \
             fedora:45 \
