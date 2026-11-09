@@ -16,13 +16,13 @@ Edge under FEX works. It is also slow. The arm64 Chromium on the same board is f
 
 It is doable, with one hard condition.
 
-The profile files copy cleanly. Passwords, cookies, and sign-in tokens do not travel with the files. They are encrypted with a secret that lives in GNOME Keyring, under an entry named for Edge, and Chromium looks for the same kind of entry under it's own name. A copy made without moving that secret looks fine on disk and fails in the browser: in the Podman test in findings/, Chromium opened a copied profile, kept all 664 login rows, dropped the cookie count from 151 to 0, and logged a token decrypt failure.
+The profile files copy cleanly. Passwords, cookies, and sign-in tokens do not travel with the files. They are encrypted with a secret that lives in GNOME Keyring, under an entry named for Edge, and Chromium looks for the same kind of entry under it's own name. A copy made without moving that secret looks fine on disk and fails in the browser: the login rows all arrive, the cookies decrypt to nothing, and the browser logs a token decrypt failure.
 
-So the sync has three jobs, not one: (1) copy the files, (2) move the Safe Storage secret from the Edge keyring entry to the Chromium keyring entry, (3) prove the copy can decrypt before it replaces the live Chromium profile. The full test record is in findings/2026-11-08-profile-mirroring-investigation.md.
+So the sync has three jobs, not one: (1) copy the files, (2) move the Safe Storage secret from the Edge keyring entry to the Chromium keyring entry, (3) prove the copy can decrypt before it replaces the live Chromium profile. The full test record is in the [investigation findings](findings/2026-11-08-profile-mirroring-investigation.md).
 
 ## How it works
 
-The bundle carries everything. One tar holds FEX and the amd64 Edge build as extracted binaries, a trimmed x86-64 sysroot built from Edge's library closure (750 MB where the full FEX rootfs is 2.9 GB, and 680 MB of that is Edge itself), an arm64 Chromium build of the same major version, and the sync service. No package manager runs on the user's machine, on Ubuntu or Fedora or anything else: a build script downloads and extracts the .deb files on a build machine, and install.sh on the user's machine only writes per-user files. Findings 10 to 14 in findings/ have the test record, including the cold untar test.
+The bundle carries everything. One tar holds FEX and the amd64 Edge build as extracted binaries, a trimmed x86-64 sysroot built from Edge's library closure (750 MB where the full FEX rootfs is 2.9 GB, and 680 MB of that is Edge itself), an arm64 Chromium build of the same major version, and the sync service. No package manager runs on the user's machine, on Ubuntu or Fedora or anything else: a build script downloads and extracts the .deb files on a build machine, and install.sh on the user's machine only writes per-user files.
 
 The first run of Edge is the one manual step. A pre-written preferences file skips the first-run screens, the default browser prompt, and the tour. What it cannot skip is the Microsoft sign-in itself, and it should not: sign-in, sync, and any multi-factor prompt happen in the headed Edge window, once.
 
