@@ -1,0 +1,2 @@
+# The bridge keeps the mirror fresh on its own. The settings app is the off switch.
+enable edge-arm-bridge-wake.timer

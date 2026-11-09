@@ -64,6 +64,11 @@ app.OnActivate += (_, _) =>
 
     void RunFirstSync()
     {
+        if (!File.Exists(settings.ChromiumBinaryPath))
+        {
+            step2State.SetText("No Chromium or Chrome is installed on this machine, so the mirror has nowhere to land. Install Chromium (or Chrome), then reopen this app.");
+            return;
+        }
         step2State.SetText("Mirroring now: copying the profile, moving the sign-in secret, test-decrypting a stored password.");
         RunWithPoll("/usr/bin/edge-arm-bridge-sync", note, status, code =>
         {
@@ -135,7 +140,7 @@ app.OnActivate += (_, _) =>
     firstRunBox.Append(StepLabel("3. Open Chromium", "The fast native browser, with your Edge logins and cookies live in it."));
     firstRunBox.Append(step3State);
     firstRunBox.Append(openChromium);
-    firstRunBox.Append(Label.New("After this, turn on the wake timer below and the mirror stays fresh on its own."));
+    firstRunBox.Append(Label.New("The wake timer is on by default and keeps the mirror fresh from here. Its switch is in the settings below, if you ever want it off."));
     var firstRunCard = Frame.New("First run");
     firstRunCard.SetChild(firstRunBox);
     firstRunCard.SetVisible(FirstRunIncomplete());
@@ -206,6 +211,13 @@ app.OnActivate += (_, _) =>
     grid.Attach(note, 0, row, 2, 1);
 
     var page = Box.New(Orientation.Vertical, 10);
+    if (!File.Exists(settings.ChromiumBinaryPath))
+    {
+        var browserError = Label.New("No Chromium or Chrome is installed on this machine, so the mirror has nowhere to land. Install Chromium (or Chrome), then reopen this app.");
+        browserError.SetXalign(0);
+        browserError.SetWrap(true);
+        page.Append(browserError);
+    }
     page.Append(firstRunCard);
     page.Append(grid);
     window.SetChild(page);

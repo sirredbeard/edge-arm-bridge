@@ -60,6 +60,7 @@ Requires:       libsecret
 Requires:       gtk4
 Requires:       fuse3
 Requires:       systemd
+Requires:       (chromium or google-chrome-stable)
 EOF
 for i in $(seq 0 $((PART_COUNT - 1))); do echo "Requires:       edge-arm-bridge-edge-image-$i = %{version}-%{release}"; done
 cat <<'EOF'
@@ -105,7 +106,7 @@ cat <<'EOF'
 
 %install
 ROOT=%{buildroot}/usr/lib/edge-arm-bridge
-mkdir -p "$ROOT" %{buildroot}/usr/bin %{buildroot}/usr/lib/systemd/user \
+mkdir -p "$ROOT" %{buildroot}/usr/bin %{buildroot}/usr/lib/systemd/user %{buildroot}/usr/lib/systemd/user-preset \
     %{buildroot}/usr/share/applications \
     %{buildroot}/usr/share/icons/hicolor/scalable/apps \
     %{buildroot}/usr/share/edge-arm-bridge/image-parts \
@@ -119,6 +120,7 @@ for w in edge-arm-bridge-edge edge-arm-bridge-sync edge-arm-bridge-wake edge-arm
     install -m 0755 "stage/files/$w" "%{buildroot}/usr/bin/$w"
 done
 install -m 0644 stage/files/edge-arm-bridge-wake.service stage/files/edge-arm-bridge-wake.timer %{buildroot}/usr/lib/systemd/user/
+install -m 0644 stage/files/90-edge-arm-bridge.preset %{buildroot}/usr/lib/systemd/user-preset/
 install -m 0644 stage/files/microsoft-edge-fex.desktop stage/files/edge-arm-bridge-configurator.desktop %{buildroot}/usr/share/applications/
 install -m 0644 stage/icons/edge-arm-bridge-sync.svg %{buildroot}/usr/share/icons/hicolor/scalable/apps/edge-arm-bridge-sync.svg
 for png in stage/edge-icons/microsoft-edge-*.png; do
@@ -129,6 +131,16 @@ done
 cp stage/parts/part-* %{buildroot}/usr/share/edge-arm-bridge/image-parts/
 echo "IMAGE_SHA256_PLACEHOLDER" > "$ROOT/image/image.sha256"
 cp stage/VERSIONS.txt "$ROOT/VERSIONS.txt" 2>/dev/null || true
+
+%post
+# Register the wake timer for every user on first install. The sync runs
+# as the user (it needs the user's keyring), so the unit is a user unit;
+# --global is how a package turns a user unit on by default. The settings
+# app is the off switch: a per-user disable beats this, and upgrades
+# never re-enable (this block only runs when $1 is 1).
+if [ "$1" -eq 1 ]; then
+    systemctl --global enable edge-arm-bridge-wake.timer >/dev/null 2>&1 || true
+fi
 
 %posttrans
 ROOT=/usr/lib/edge-arm-bridge
@@ -162,6 +174,7 @@ fi
 /usr/bin/edge-arm-bridge-configurator
 /usr/lib/systemd/user/edge-arm-bridge-wake.service
 /usr/lib/systemd/user/edge-arm-bridge-wake.timer
+/usr/lib/systemd/user-preset/90-edge-arm-bridge.preset
 /usr/share/applications/microsoft-edge-fex.desktop
 /usr/share/applications/edge-arm-bridge-configurator.desktop
 /usr/share/icons/hicolor/scalable/apps/edge-arm-bridge-sync.svg
