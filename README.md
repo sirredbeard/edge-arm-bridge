@@ -50,8 +50,6 @@ Service. A systemd user timer wakes Edge every 6 hours, gives it 5 minutes to sy
 $ ~/.local/opt/edge-arm-bridge/edge-arm-bridge.sh --service
 ```
 
-One catch while this repo is private: GitHub does not serve release assets to anonymous requests, so the curl line 404s without a GitHub token. Download the release with gh, or make the repo public, and the one-liner works as written. --install also accepts a local bundle through EDGE_ARM_BRIDGE_TARBALL.
-
 By hand, when wanted: --sync mirrors once, --wake runs one wake-and-mirror. A dry run of the mirror, which copies to staging and runs the checks but never swaps, is the service in the bundle called with --once --dry-run.
 
 To build a fresh bundle with the newest FEX, Edge stable, and Chromium:
@@ -75,11 +73,5 @@ edge-arm-bridge/
 |-- LICENSE
 `-- README.md
 ```
-
-## Thanks
-
-The FEX launch path, the child-process workaround, and the Wayland notes come from edge-fex. The profile copy experiments build on the agent-edge-bridge work on the same board.
-
-## License
 
 Apache 2.0. See LICENSE.
