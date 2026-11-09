@@ -17,7 +17,7 @@ public sealed class SyncConfig
     public static SyncConfig Load(string path)
     {
         var json = File.ReadAllText(path);
-        var config = JsonSerializer.Deserialize<SyncConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+        var config = JsonSerializer.Deserialize(json, AppJsonContext.Default.SyncConfig)
             ?? throw new InvalidDataException($"Config file parsed to nothing: {path}");
         if (string.IsNullOrWhiteSpace(config.EdgeProfilePath))
             throw new InvalidDataException("config: edgeProfilePath is required");

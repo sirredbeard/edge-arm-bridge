@@ -98,8 +98,11 @@ curl -fsSL "https://storage.googleapis.com/chrome-for-testing-public/$CFT_VERSIO
 unzip -q "$BUILD/cft.zip" -d "$STAGE/chromium"
 
 # --- The bridge service, self-contained for linux-arm64 ---
-dotnet publish -c Release -r linux-arm64 --self-contained true -o "$STAGE/bridge" "$REPO/src/EdgeArmBridge"
-rm -f "$STAGE/bridge"/*.pdb
+# The service publishes as Native AOT (PublishAot is set in the project):
+# one native arm64 binary, no runtime in the bundle and none needed on the
+# machine. The .dbg is the AOT symbol file. It stays out of the bundle.
+dotnet publish -c Release -r linux-arm64 -o "$STAGE/bridge" "$REPO/src/EdgeArmBridge"
+rm -f "$STAGE/bridge"/*.pdb "$STAGE/bridge"/*.dbg
 mkdir -p "$STAGE/tools"
 cp "$REPO/tools/probe_profile.py" "$STAGE/tools/"
 cp -r "$REPO/packaging/bundle/." "$STAGE/"
@@ -113,7 +116,7 @@ FEX_VERSION=$(basename "$FEX_DEB" | sed -E 's/fex-emu-[a-z0-9.]+_([0-9]+)-.*/\1/
   echo "fex: $FEX_VERSION (fex-emu-armv8.2 .deb, extracted, self-contained with bundled arm64 C runtime)"
   echo "edge: $EDGE_VERSION amd64 (microsoft-edge-stable .deb, extracted)"
   echo "chromium: Chrome for Testing $CFT_VERSION linux-arm64"
-  echo "bridge: .NET 11, self-contained linux-arm64 publish"
+  echo "bridge: .NET 11 Native AOT, single native linux-arm64 binary, no runtime"
   echo "image: edge-image.squashfs, Ubuntu noble amd64 library closure plus Edge, trimmed by packaging/mk-sysroot.py"
 } > "$STAGE/VERSIONS.txt"
 

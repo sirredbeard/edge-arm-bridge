@@ -234,3 +234,19 @@ Two runs against v0.1.0, both success (runs 42546536610 and 42546926837). The CI
 One real bug was found and fixed between the two runs: the first CI checksum file named the tar by it's absolute build path, so sha256sum -c on a user's machine would have looked for a file that does not exist there and failed the install at the verify step. build-bundle.sh now writes the checksum with the plain filename. Worth remembering as the general shape of CI-only bugs: the build was fine, the artifact's paperwork was not, and only an end-to-end install from the release caught it.
 
 The remaining flow note: --install always takes the newest published release, so a release published before it's workflow finishes has a short window with no bundle asset on it. Publish as a draft, let the build attach the bundle, then publish. The workflow file says the same.
+
+## Round five, same day: the sync service as Native AOT
+
+Direction for this round: the arm64 build of the service should be self-contained, trimmed, and fast on the current .NET 11 optimization paths, with no runtime on the machine at all. Guidance came from the dotnet/skills repo (github.com/dotnet/skills), in particular the dotnet-aot-compat skill: turn IsAotCompatible on, let the analyzers list the problems, fix what they point at, and use source-generated JSON where the serializer warnings cluster.
+
+## Finding 23: Native AOT takes the service from 87 MB and a runtime to a 4 MB native binary
+
+The project now sets PublishAot, IsAotCompatible, OptimizationPreference=Speed, and InvariantGlobalization. The publish is a single stripped ELF for linux-arm64, 4,028,928 bytes. The self-contained publish it replaces was 87 MB of runtime and framework. Process start on the usage path measured 83 ms for the self-contained build and 18 ms for the AOT binary on this board. The build machine needs clang and zlib1g-dev for the native link; both are on the board, and the workflow installs them.
+
+The analyzers found exactly the expected problem class and nothing else. Three JsonSerializer calls used reflection: the config load, and the two small files the service writes (status.json and the sync state file). The config load and the state write moved to a source-generated JsonSerializerContext. The status write looked just as simple and was not:
+
+## Finding 24: a Dictionary<string, object> is a polymorphic trap, and the test suite is what catches it
+
+The first AOT build compiled clean and then died at runtime the first time it wrote status.json: no metadata for System.Int64, then for System.Boolean, because a dictionary of object holds whatever runtime types land in it and the generated serializer knows none of them. The fix is typed records (StatusFile, StateFile) with the same snake_case JSON names, written by the same code paths. status.json comes out in the same shape as before, nulls omitted as before.
+
+The behavioral suite then passed end to end against the AOT binary, on the same synthetic profiles as round one: correct secret mirrors and exits 0 with decrypt_check passed in status.json, wrong secret exits 3 and does not swap, dry run exits 0 and swaps nothing. The lesson worth keeping is the order of events: build warnings said the code was AOT-clean, and it was, for compilation. Only running the real paths showed the dictionary problem. An AOT conversion is not done when it builds. It is done when the test suite passes against the native binary.

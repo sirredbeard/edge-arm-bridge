@@ -51,21 +51,21 @@ return ExitCodes.Ok;
 async Task<int> RunSyncAsync(SyncConfig cfg, bool dry, CancellationToken ct)
 {
     Directory.CreateDirectory(cfg.WorkDirectory);
-    var status = new Dictionary<string, object?>
+    var status = new StatusFile
     {
-        ["started_at"] = DateTimeOffset.Now.ToString("u"),
-        ["source"] = cfg.EdgeProfilePath,
-        ["target"] = cfg.ChromiumProfilePath,
-        ["dry_run"] = dry,
+        StartedAt = DateTimeOffset.Now.ToString("u"),
+        Source = cfg.EdgeProfilePath,
+        Target = cfg.ChromiumProfilePath,
+        DryRun = dry,
     };
     int Finish(int code, string result, string? detail = null)
     {
-        status["exit_code"] = code;
-        status["result"] = result;
-        if (detail is not null) status["detail"] = detail;
-        status["finished_at"] = DateTimeOffset.Now.ToString("u");
+        status.ExitCode = code;
+        status.Result = result;
+        status.Detail = detail;
+        status.FinishedAt = DateTimeOffset.Now.ToString("u");
         File.WriteAllText(Path.Combine(cfg.WorkDirectory, "status.json"),
-            JsonSerializer.Serialize(status, new JsonSerializerOptions { WriteIndented = true }));
+            JsonSerializer.Serialize(status, AppJsonContext.Default.StatusFile));
         Console.WriteLine($"sync {result}: {detail ?? result}");
         return code;
     }
@@ -81,8 +81,8 @@ async Task<int> RunSyncAsync(SyncConfig cfg, bool dry, CancellationToken ct)
     // older browser.
     var sourceMajor = ProfileSync.ReadSourceMajor(cfg.EdgeProfilePath);
     var targetMajor = await ReadChromiumMajorAsync(cfg.ChromiumBinary, ct);
-    status["source_major"] = sourceMajor;
-    status["target_major"] = targetMajor;
+    status.SourceMajor = sourceMajor;
+    status.TargetMajor = targetMajor;
     if (sourceMajor is not null && targetMajor is not null &&
         int.TryParse(sourceMajor, out var s) && int.TryParse(targetMajor, out var t) && t < s)
         return Finish(ExitCodes.VersionGate, "failed", $"target browser major {t} is older than source profile major {s}. Update Chromium first.");
@@ -90,8 +90,8 @@ async Task<int> RunSyncAsync(SyncConfig cfg, bool dry, CancellationToken ct)
     ProbeResult sourceProbe;
     try { sourceProbe = await Probe.RunAsync(cfg.ProbeScript, cfg.EdgeProfilePath, ct); }
     catch (Exception ex) { return Finish(ExitCodes.CopyFailed, "failed", $"source probe failed: {ex.Message}"); }
-    status["source_logins"] = sourceProbe.Logins;
-    status["source_cookies"] = sourceProbe.Cookies;
+    status.SourceLogins = sourceProbe.Logins;
+    status.SourceCookies = sourceProbe.Cookies;
 
     var staging = Path.Combine(cfg.WorkDirectory, "staging-profile");
     try { ProfileSync.CopyToStaging(cfg.EdgeProfilePath, staging); }
@@ -125,7 +125,7 @@ async Task<int> RunSyncAsync(SyncConfig cfg, bool dry, CancellationToken ct)
         if (!OscryptCheck.TryDecrypt(blob, secret, out _))
             return Finish(ExitCodes.DecryptCheckFailed, "failed",
                 "a sampled password from the staged copy does not decrypt with the Edge Safe Storage secret. Not swapping.");
-        status["decrypt_check"] = "passed";
+        status.DecryptCheck = "passed";
     }
 
     // Do not strand passwords the target saved on it's own (finding 5).
@@ -150,7 +150,7 @@ async Task<int> RunSyncAsync(SyncConfig cfg, bool dry, CancellationToken ct)
     }
     var ageHours = (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - sourceProbe.NewestMtime) / 3600.0;
     var stale = sourceProbe.NewestMtime == lastNewest && ageHours > cfg.StaleSourceWarnHours;
-    status["source_stale_suspected"] = stale;
+    status.SourceStaleSuspected = stale;
 
     if (dry)
     {
@@ -167,11 +167,11 @@ async Task<int> RunSyncAsync(SyncConfig cfg, bool dry, CancellationToken ct)
     }
     catch (Exception ex) { return Finish(ExitCodes.CopyFailed, "failed", $"swap failed, previous profile restored where possible: {ex.Message}"); }
 
-    File.WriteAllText(statePath, JsonSerializer.Serialize(new Dictionary<string, object>
+    File.WriteAllText(statePath, JsonSerializer.Serialize(new StateFile
     {
-        ["source_newest_mtime"] = sourceProbe.NewestMtime,
-        ["last_sync_at"] = DateTimeOffset.Now.ToString("u"),
-    }));
+        SourceNewestMtime = sourceProbe.NewestMtime,
+        LastSyncAt = DateTimeOffset.Now.ToString("u"),
+    }, AppJsonContext.Default.StateFile));
     return Finish(stale ? ExitCodes.SourceMayBeStale : ExitCodes.Ok,
         stale ? "synced, with a warning" : "synced",
         stale ? "the Edge profile has not changed across two runs and looks stale. Check that Edge is signed in and syncing." : "profile mirrored and decrypt check passed");

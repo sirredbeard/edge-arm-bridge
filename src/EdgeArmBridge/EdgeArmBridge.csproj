@@ -5,6 +5,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>EdgeArmBridge</AssemblyName>
+    <!-- Native AOT: one native binary, no runtime on the machine, nothing
+         to JIT at startup. IsAotCompatible turns the trim and AOT
+         analyzers on for normal builds, so problems show up as warnings
+         long before publish. Speed over size in the AOT compiler: this
+         binary runs rarely and briefly, and the size win from AOT over a
+         self-contained build is already large without trading speed for
+         more. Invariant globalization: the service matches file names,
+         keyring labels, and JSON keys, and never formats for a locale. -->
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <InvariantGlobalization>true</InvariantGlobalization>
     <RootNamespace>EdgeArmBridge</RootNamespace>
   </PropertyGroup>
 </Project>
