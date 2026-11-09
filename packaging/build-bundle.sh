@@ -121,6 +121,6 @@ OUT="$BUILD/edge-arm-bridge-$EDGE_VERSION.tar.gz"
 tar -czf "$OUT" -C "$BUILD" bundle
 mv "$OUT" "$BUILD/edge-arm-bridge.tar.gz"
 OUT="$BUILD/edge-arm-bridge.tar.gz"
-sha256sum "$OUT" > "$OUT.sha256"
+(cd "$BUILD" && sha256sum edge-arm-bridge.tar.gz > edge-arm-bridge.tar.gz.sha256)
 echo "built: $OUT ($(du -h "$OUT" | cut -f1))"
 cat "$STAGE/VERSIONS.txt"
