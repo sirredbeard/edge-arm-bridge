@@ -164,3 +164,49 @@ What install.sh does not do is install host libraries. FEX and Chromium link a s
 Left on the host by design: a glibc, a desktop session with an unlocked keyring (finding 3), systemd user services for the daily timer, and python3 for the profile probe. The bundle binaries are Ubuntu noble builds. Fedora arm64 is also glibc, and the ldd check is the test that decides it machine by machine. Fedora itself is untested: nobody has untarred this bundle on a Fedora host yet.
 
 Still untested in this round: a headed Wayland run from the bundle sysroot (the GTK and thunk surface is seeded, not proven), the GitHub workflow in .github/workflows/build-bundle.yml (scaffold, mirrors the tested build script), and a rebuild cycle against a real new Edge major.
+
+## Round three, same day: self-contained FEX, a trimmed image, and one script
+
+Direction for this round: the bundle is three things - the compiled sync app, a self-contained FEX that does not need a host install, and the FEX image (an optimized rootfs carrying a recent Edge). Installation becomes one script with three modes: --install pulls the newest release tar, --configure opens Edge for the Microsoft sign-in, --service sets up a systemd timer that wakes Edge under FEX on a cycle, lets it sync, and mirrors the profile to Chromium.
+
+## Finding 16: FEX can carry it's own C runtime. One path has to be patched at install time
+
+FEX and FEXServer link libc, libstdc++, libm, and libgcc (finding 10). Extract the arm64 builds of libc6, libstdc++6, and libgcc-s1 into the same tree and the dependency set is complete for the emulator itself. The binaries then need two path settings:
+
+- An rpath of $ORIGIN/../lib/aarch64-linux-gnu. DT_RUNPATH expands $ORIGIN, so this works wherever the bundle lands. Set at build time.
+- The interpreter (PT_INTERP). That path is absolute and does not expand anything, so it cannot be set at build time. install.sh sets it on the user's machine, running the bundled patchelf through the bundled loader: loader patchelf --set-interpreter <bundle loader> FEX. No host tools involved.
+
+Tests, all with env -i (no PATH to the staged tree, no LD_LIBRARY_PATH):
+
+- Patched tree in place: Edge rendered https://example.com, exit 0.
+- Tree copied to a new location and re-patched there, original tree hidden: Edge rendered about:blank, exit 0. The bundle survives being moved, which is the whole point.
+- The FEX tree with runtime libraries included is 46 MB.
+
+The graphics thunks are the exception that proves the rule. HostThunks dlopen the host's GL and Wayland libraries on purpose: the whole idea is to reach the host GPU. Distro agnostic covers the emulator's own runtime. The guest still renders through the host's graphics stack, as it did in edge-fex.
+
+## Finding 17: the Edge image trims from 749 MB to 538 MB, and the sign-in page still renders
+
+The Edge 157 tree is 680 MB, and 402 MB of that is the msedge binary itself. The rest was negotiable:
+
+- locales/: 336 files, 146 MB. Keeping en-US only (four files, 1.2 MB) saves 145 MB. A user who needs another language needs that language's .pak files back: the trim list in mk-sysroot.py is one constant, and this is the first entry to revisit for a non-English build.
+- WidevineCdm (21 MB), libmspdf.so (17 MB), libonnxruntime.so (12 MB), libmip_core_gn.so (7.7 MB), msedge-management-service (6.9 MB), liboneds.so (3.4 MB): each removed, then the image retested.
+- Kept on purpose: liboneauth.so, the Microsoft account authentication library. Removing parts near it would be self-defeating in a browser who's job is a Microsoft sign-in.
+
+Every trim round ran the same checks against the self-contained FEX and the trimmed image: https://example.com rendered, no FATAL lines, no loader errors. Final check, and the one that matches the mission: https://login.microsoftonline.com/ rendered in full, 73,640 bytes of DOM, 'Sign in to your account' present. Sysroot after trims: 538 MB, against 749 MB untrimmed and 2.9 GB for the full rootfs.
+
+One wart, recorded plain: during the headless wake run, one Edge child process logged 'LaunchProcess: failed to execvp: /opt/microsoft/msedge/msedge'. The browser itself ran, built the profile, and exited clean under the scope stop. Which child it was is not pinned down.
+
+## Finding 18: the image ships as one squashfs file, 219 MB
+
+The trimmed sysroot as a zstd squashfs (mksquashfs -comp zstd -b 1M) is 219,459,584 bytes. FEX mounts it through FEXServer when FEX_ROOTFS names the file: tested, Edge rendered https://example.com from the image, exit 0.
+
+Two consequences worth stating. The image is read-only, so Edge cannot update it's own install inside it: for a sign-in appliance that is a feature, and a new Edge means a new bundle build, which the workflow exists to produce. And mounting needs /dev/fuse on the host: install.sh checks for it and says so in plain language, and build-bundle.sh can still produce the loose directory form.
+
+## Finding 19: the three-mode script, cold-tested end to end
+
+Bundle v2 as assembled for the test: 749 MB untarred (against 1.3 GB for v1, the squashfs and the trims doing the work), tar.gz 472,561,821 bytes.
+
+- --install from a local tarball with a scratch HOME: exit 0. Bundle landed in ~/.local/opt/edge-arm-bridge, and readelf on the installed FEX shows the interpreter pointing into that install directory, so the finding 16 patch chain works through the real script, not just by hand.
+- --configure in a session with no display: exit 1 with a plain message to run it from the desktop session. The headed path itself is the round-one run-edge.sh, unchanged.
+- --service: wrote edge-arm-bridge-wake.service and .timer with the install path filled in (OnCalendar 00,06,12,18:15). In the test shell systemctl --user could not be reached, and the script said so and printed the two commands instead of failing.
+- Wake-and-mirror by hand: Edge woke headless from the squashfs image, built a fresh profile's worth of files, took the scope stop, and the mirror copied the profile to the Chromium directory and wrote it's marker file. status.json: synced, exit 0. A brand-new profile has no Login Data yet (no password has ever been saved in it), and the probe reported 0 logins rather than inventing a problem.

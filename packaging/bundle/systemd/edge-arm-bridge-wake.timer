@@ -1,0 +1,9 @@
+[Unit]
+Description=Wake Edge under FEX and mirror the profile every 6 hours
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

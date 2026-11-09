@@ -1,0 +1,11 @@
+[Unit]
+Description=edge-arm-bridge wake Edge, let it sync, then mirror to Chromium
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+ExecStart=@BUNDLE@/wake-and-sync.sh
+
+[Install]
+WantedBy=default.target

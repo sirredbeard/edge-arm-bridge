@@ -53,6 +53,36 @@ def needed(path):
     return [line.split("[")[1].rstrip("]") for line in out.splitlines() if "(NEEDED)" in line]
 
 
+# Trims applied to the Edge tree as it lands in the sysroot. This image is
+# a sign-in appliance, not a general browser install. Each entry was tested
+# the same way: remove it, render https://example.com and the Microsoft
+# sign-in page headless, read the log for FATAL and loader errors.
+# Locales are trimmed separately: en-US only, which takes locales/ from
+# 146 MB to 1.2 MB on Edge 157.
+EDGE_TRIMS = [
+    "WidevineCdm",               # DRM playback. A sign-in browser never loads it.
+    "msedge-management-service", # Enterprise management binary.
+    "libmspdf.so",               # PDF viewer, loaded on demand by PDFs.
+    "libonnxruntime.so",         # On-device ML for browser features.
+    "libmip_core_gn.so",         # Data protection library.
+    "liboneds.so",               # OneDrive/DS integration.
+]
+
+
+def trim_edge(edge_out):
+    locales = os.path.join(edge_out, "locales")
+    if os.path.isdir(locales):
+        for name in os.listdir(locales):
+            if not name.startswith("en-US"):
+                os.remove(os.path.join(locales, name))
+    for name in EDGE_TRIMS:
+        path = os.path.join(edge_out, name)
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        elif os.path.exists(path):
+            os.remove(path)
+
+
 def main():
     pool, edge_dir, out = sys.argv[1], sys.argv[2], sys.argv[3]
 
@@ -68,6 +98,7 @@ def main():
         shutil.rmtree(out)
     os.makedirs(os.path.join(out, "opt/microsoft"))
     shutil.copytree(edge_dir, os.path.join(out, "opt/microsoft/msedge"), symlinks=True)
+    trim_edge(os.path.join(out, "opt/microsoft/msedge"))
 
     lib_out = os.path.join(out, "usr/lib/x86_64-linux-gnu")
     os.makedirs(lib_out)

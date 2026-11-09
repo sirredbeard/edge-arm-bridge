@@ -1,7 +1,8 @@
 #!/bin/sh
 # Install edge-arm-bridge from the untarred bundle. No package manager is
-# involved: everything the bundle needs is inside the bundle, and this
-# script only writes per-user files. Run it as your normal user.
+# involved, and nothing is installed system-wide. The script untars into
+# place, points the bundled FEX binaries at the bundled loader, and writes
+# per-user files. Run it as your normal user.
 set -eu
 cd "$(dirname "$0")"
 BUNDLE=$PWD
@@ -13,21 +14,38 @@ if [ "$(uname -m)" != "aarch64" ]; then
   exit 1
 fi
 
-# FEX and Chromium link a short list of host libraries (libstdc++, libGL,
-# and friends). A desktop install has them. A bare server may not, and the
-# honest answer there is to say which ones are missing, not to guess at a
-# package manager.
-missing=""
-for bin in "$BUNDLE/fex/usr/bin/FEX" "$BUNDLE/chromium/chrome-linux-arm64/chrome"; do
-  for lib in $(ldd "$bin" 2>/dev/null | awk '/not found/ {print $1}'); do
-    missing="$missing $lib"
-  done
+# Self-contained FEX: the binaries ship with an rpath that finds the bundled
+# libraries relative to the binary ($ORIGIN), but a PT_INTERP interpreter
+# path is absolute and cannot be. Patch it here, where the real bundle path
+# is known, using the bundled loader to run the bundled patchelf. After this
+# step FEX needs nothing from the host C library at all.
+LOADER="$BUNDLE/fex/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+for bin in FEX FEXServer; do
+  "$LOADER" "$BUNDLE/fex/usr/bin/patchelf" --set-interpreter "$LOADER" "$BUNDLE/fex/usr/bin/$bin"
 done
-if [ -n "$missing" ]; then
-  echo "Host libraries missing for the bundled binaries:" >&2
-  for lib in $missing; do echo "  $lib" >&2; done
-  echo "Install your distribution's standard desktop libraries for these, then run install.sh again." >&2
-  exit 1
+echo "FEX interpreter pointed at the bundled loader."
+
+# The Edge image is a squashfs file. FEX mounts it through FUSE, so the host
+# needs /dev/fuse. Desktops have it. Say so plainly where it is missing
+# rather than letting the first sign-in run fail stranger.
+if [ ! -e /dev/fuse ]; then
+  echo "Warning: /dev/fuse is not present, and FEX needs it to mount the" >&2
+  echo "Edge image (image/edge-image.squashfs). The bundle also builds in a" >&2
+  echo "loose-directory form: see packaging/build-bundle.sh." >&2
+fi
+
+# Chromium still links host libraries (libstdc++, the graphics stack). A
+# desktop install has them. Where they are missing, name them and stop
+# rather than guessing at a package manager.
+CHROME="$BUNDLE/chromium/chrome-linux-arm64/chrome"
+if [ -x "$CHROME" ]; then
+  missing=$(ldd "$CHROME" 2>/dev/null | awk '/not found/ {print $1}')
+  if [ -n "$missing" ]; then
+    echo "Host libraries missing for the bundled Chromium:" >&2
+    for lib in $missing; do echo "  $lib" >&2; done
+    echo "Install your distribution's standard desktop libraries for these, then run install.sh again." >&2
+    exit 1
+  fi
 fi
 
 mkdir -p "$DATA/edge-profile" "$DATA/chromium-profile" "$DATA/work" "$CONFIG_DIR"
@@ -46,10 +64,9 @@ cp "$BUNDLE/systemd/edge-arm-bridge.timer" "$UNIT_DIR/edge-arm-bridge.timer"
 
 echo "Installed. Config: $CONFIG_DIR/config.json"
 echo
-
 echo "Next steps:"
 echo "  1. Sign in, once:        $BUNDLE/run-edge.sh"
 echo "     Sign into the Microsoft account in the Edge window, let sync"
 echo "     finish, then close Edge."
 echo "  2. First mirror by hand: $BUNDLE/sync.sh"
-echo "  3. Daily mirror:         systemctl --user enable --now edge-arm-bridge.timer"
+echo "  3. Periodic wake + sync: $BUNDLE/edge-arm-bridge.sh --service"

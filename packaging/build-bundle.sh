@@ -28,14 +28,26 @@ CFT_VERSION=$(curl -fsSL https://googlechromelabs.github.io/chrome-for-testing/l
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["channels"]["Stable"]["version"])')
 
 # --- FEX: download the arm64 .deb packages, extract, never install ---
-(cd "$BUILD/debs" && apt-get download fex-emu-armv8.2 >/dev/null)
+# Self-contained: FEX ships with it's own arm64 C runtime (libc6, libstdc++6,
+# libgcc-s1) and a bundled patchelf. The binaries get an $ORIGIN rpath here.
+# The interpreter path is absolute and cannot be set until the bundle's
+# final location is known, so install.sh patches it there, running patchelf
+# through the bundled loader. Nothing of FEX touches the host C library
+# after that, which is what makes the same tar work across distributions.
+(cd "$BUILD/debs" && apt-get download fex-emu-armv8.2 libc6 libstdc++6 libgcc-s1 patchelf >/dev/null)
 FEX_DEB=$(ls "$BUILD"/debs/fex-emu-*.deb | head -1)
 mkdir -p "$STAGE/fex"
 dpkg-deb -x "$FEX_DEB" "$STAGE/fex"
+for d in "$BUILD"/debs/libc6_*.deb "$BUILD"/debs/libstdc++6_*.deb "$BUILD"/debs/libgcc-s1_*.deb "$BUILD"/debs/patchelf_*.deb; do
+  dpkg-deb -x "$d" "$STAGE/fex"
+done
 # FEXConfig is a Qt GUI the bundle does not use. Drop it and it's the only
 # reason the .deb mentions Qt at all: FEX and FEXServer link libc, libstdc++,
 # libm, and libgcc only.
 rm -f "$STAGE/fex/usr/bin/FEXConfig" "$STAGE/fex/usr/bin/FEXRootFSFetcher"
+for bin in FEX FEXServer; do
+  patchelf --set-rpath '$ORIGIN/../lib/aarch64-linux-gnu' "$STAGE/fex/usr/bin/$bin"
+done
 
 # --- Edge and the sysroot pool: amd64 .debs in a scratch apt state ---
 curl -fsSL "https://packages.microsoft.com/repos/edge-stable/pool/main/m/microsoft-edge-stable/$EDGE_DEB" -o "$BUILD/debs/$EDGE_DEB"
@@ -63,12 +75,15 @@ xkb-data
 zlib1g
 EXTRA
 sort -u -o "$BUILD/libs.txt" "$BUILD/libs.txt"
-(cd "$BUILD/debs" && while read -r pkg; do $APT download "$pkg" >/dev/null 2>&1 || echo "build: skipped $pkg"; done < "$BUILD/libs.txt")
+grep -v '^libasound2-data$' "$BUILD/libs.txt" > "$BUILD/libs-batch.txt" || true
+(cd "$BUILD/debs" && $APT download $(cat "$BUILD/libs-batch.txt") >/dev/null 2>&1) ||   (cd "$BUILD/debs" && while read -r pkg; do $APT download "$pkg" >/dev/null 2>&1 || echo "build: skipped $pkg"; done < "$BUILD/libs-batch.txt")
 mkdir -p "$BUILD/pool"
 for d in "$BUILD"/debs/*.deb; do dpkg-deb -x "$d" "$BUILD/pool"; done
 mkdir -p "$BUILD/edge-x"
 dpkg-deb -x "$BUILD/debs/$EDGE_DEB" "$BUILD/edge-x"
-python3 "$REPO/packaging/mk-sysroot.py" "$BUILD/pool" "$BUILD/edge-x/opt/microsoft/msedge" "$STAGE/sysroot"
+python3 "$REPO/packaging/mk-sysroot.py" "$BUILD/pool" "$BUILD/edge-x/opt/microsoft/msedge" "$BUILD/sysroot-loose"
+mkdir -p "$STAGE/image"
+mksquashfs "$BUILD/sysroot-loose" "$STAGE/image/edge-image.squashfs" -comp zstd -b 1M -noappend -quiet
 
 # --- Chromium: arm64 Chrome for Testing, same major as Edge by policy ---
 CFT_MAJOR=$(echo "$CFT_VERSION" | cut -d. -f1)
@@ -88,17 +103,18 @@ rm -f "$STAGE/bridge"/*.pdb
 mkdir -p "$STAGE/tools"
 cp "$REPO/tools/probe_profile.py" "$STAGE/tools/"
 cp -r "$REPO/packaging/bundle/." "$STAGE/"
+cp "$REPO/edge-arm-bridge.sh" "$STAGE/edge-arm-bridge.sh"
 chmod +x "$STAGE"/*.sh "$STAGE/bridge/EdgeArmBridge"
 
 FEX_VERSION=$(basename "$FEX_DEB" | sed -E 's/fex-emu-[a-z0-9.]+_([0-9]+)-.*/\1/')
 {
   echo "edge-arm-bridge bundle"
   echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "fex: $FEX_VERSION (fex-emu-armv8.2 .deb, extracted)"
+  echo "fex: $FEX_VERSION (fex-emu-armv8.2 .deb, extracted, self-contained with bundled arm64 C runtime)"
   echo "edge: $EDGE_VERSION amd64 (microsoft-edge-stable .deb, extracted)"
   echo "chromium: Chrome for Testing $CFT_VERSION linux-arm64"
   echo "bridge: .NET 11, self-contained linux-arm64 publish"
-  echo "sysroot: Ubuntu noble amd64 library closure, trimmed by packaging/mk-sysroot.py"
+  echo "image: edge-image.squashfs, Ubuntu noble amd64 library closure plus Edge, trimmed by packaging/mk-sysroot.py"
 } > "$STAGE/VERSIONS.txt"
 
 OUT="$BUILD/edge-arm-bridge-$EDGE_VERSION.tar.gz"

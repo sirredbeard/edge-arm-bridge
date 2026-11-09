@@ -32,35 +32,25 @@ The mirror is one-way. Edge is the source of truth. Changes made in Chromium do 
 
 ## Run it
 
-Untar the bundle and run the install script:
+Install. This downloads the newest release bundle (the compiled sync service, a self-contained FEX that needs no host install, and the Edge image as one squashfs file), untars it into ~/.local/opt/edge-arm-bridge, and points FEX at it's own bundled loader:
 
 ```bash
-$ tar -xzf edge-arm-bridge.tar.gz
-$ cd bundle
-$ ./install.sh
+$ curl -fsSL https://github.com/sirredbeard/edge-arm-bridge/releases/latest/download/edge-arm-bridge.sh | bash -s -- --install
 ```
 
-Sign into Edge, once:
+Configure. One manual step, in a desktop session: Edge opens under FEX, sign into the Microsoft account, let sync finish, close the window:
 
 ```bash
-$ ./run-edge.sh
+$ ~/.local/opt/edge-arm-bridge/edge-arm-bridge.sh --configure
 ```
 
-Sign into the Microsoft account in the Edge window, let sync finish, then close Edge.
-
-One manual sync:
+Service. A systemd user timer wakes Edge every 6 hours, gives it 5 minutes to sync with Microsoft, then mirrors the profile to Chromium:
 
 ```bash
-$ ./sync.sh
+$ ~/.local/opt/edge-arm-bridge/edge-arm-bridge.sh --service
 ```
 
-Daily sync under systemd (install.sh already wrote the units):
-
-```bash
-$ systemctl --user enable --now edge-arm-bridge.timer
-```
-
-The timer fires once a day and catches up after a missed day. The service also runs fine by hand, which is the better way to watch the first few syncs. A dry run, which copies to staging and runs the checks but never swaps, is the service called with --once --dry-run.
+By hand, when wanted: --sync mirrors once, --wake runs one wake-and-mirror. A dry run of the mirror, which copies to staging and runs the checks but never swaps, is the service in the bundle called with --once --dry-run.
 
 To build a fresh bundle with the newest FEX, Edge stable, and Chromium:
 
