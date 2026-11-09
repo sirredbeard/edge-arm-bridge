@@ -1,3 +1,4 @@
+# SUPERSEDED: Podman was dropped from this project in round two. Kept as a record of the attempt.
 # EXPERIMENTAL. Do not treat this as the supported path.
 #
 # The idea: one arm64 container carrying FEX and the amd64 Edge build, so a

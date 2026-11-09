@@ -1,0 +1,10 @@
+[Unit]
+Description=Run edge-arm-bridge profile sync once a day
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target

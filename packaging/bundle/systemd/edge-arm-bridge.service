@@ -1,0 +1,11 @@
+[Unit]
+Description=edge-arm-bridge profile sync (Edge under FEX to arm64 Chromium)
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+ExecStart=@BUNDLE@/sync.sh
+
+[Install]
+WantedBy=default.target

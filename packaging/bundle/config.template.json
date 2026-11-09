@@ -1,0 +1,11 @@
+{
+  "edgeProfilePath": "@DATA@/edge-profile",
+  "chromiumProfilePath": "@DATA@/chromium-profile",
+  "chromiumBinary": "@BUNDLE@/chromium/chrome-linux-arm64/chrome",
+  "workDirectory": "@DATA@/work",
+  "edgeSafeStorageLabel": "Microsoft Edge Safe Storage",
+  "chromiumSafeStorageLabel": "Chrome Safe Storage",
+  "backupsToKeep": 3,
+  "staleSourceWarnHours": 48,
+  "probeScript": "@BUNDLE@/tools/probe_profile.py"
+}

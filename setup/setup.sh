@@ -1,4 +1,5 @@
 #!/bin/bash
+# SUPERSEDED by the bundle route in packaging/. Kept for reference.
 # edge-arm-bridge setup, arm64 Ubuntu host.
 # Installs FEX and the amd64 Edge build the edge-fex way, fetches a native
 # arm64 Chromium build, writes the sync config, and builds the service.

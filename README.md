@@ -22,7 +22,7 @@ So the sync has three jobs, not one: (1) copy the files, (2) move the Safe Stora
 
 ## How it works
 
-Setup installs FEX and the amd64 Edge build on the host, the same way edge-fex does it. Setup downloads the Edge package from Microsoft at install time. Nothing in this repo re-hosts the Edge binary.
+The bundle carries everything. One tar holds FEX and the amd64 Edge build as extracted binaries, a trimmed x86-64 sysroot built from Edge's library closure (750 MB where the full FEX rootfs is 2.9 GB, and 680 MB of that is Edge itself), an arm64 Chromium build of the same major version, and the sync service. No package manager runs on the user's machine, on Ubuntu or Fedora or anything else: a build script downloads and extracts the .deb files on a build machine, and install.sh on the user's machine only writes per-user files. Findings 10 to 14 in findings/ have the test record, including the cold untar test.
 
 The first run of Edge is the one manual step. A pre-written preferences file skips the first-run screens, the default browser prompt, and the tour. What it cannot skip is the Microsoft sign-in itself, and it should not: sign-in, sync, and any multi-factor prompt happen in the headed Edge window, once.
 
@@ -32,41 +32,51 @@ The mirror is one-way. Edge is the source of truth. Changes made in Chromium do 
 
 ## Run it
 
-Setup, on an arm64 Ubuntu host:
+Untar the bundle and run the install script:
 
 ```bash
-$ ./setup/setup.sh
+$ tar -xzf edge-arm-bridge.tar.gz
+$ cd bundle
+$ ./install.sh
 ```
 
-Sign into Edge when it opens. Close Edge when sync finishes.
+Sign into Edge, once:
+
+```bash
+$ ./run-edge.sh
+```
+
+Sign into the Microsoft account in the Edge window, let sync finish, then close Edge.
 
 One manual sync:
 
 ```bash
-$ dotnet run --project src/EdgeArmBridge -- --once
+$ ./sync.sh
 ```
 
-Dry run, which copies to staging and runs the checks but never swaps:
+Daily sync under systemd (install.sh already wrote the units):
 
 ```bash
-$ dotnet run --project src/EdgeArmBridge -- --once --dry-run
-```
-
-Daily sync under systemd:
-
-```bash
-$ cp systemd/edge-arm-bridge.service systemd/edge-arm-bridge.timer ~/.config/systemd/user/
 $ systemctl --user enable --now edge-arm-bridge.timer
 ```
 
-The timer fires once a day and catches up after a missed day. The service also runs fine by hand, which is the better way to watch the first few syncs.
+The timer fires once a day and catches up after a missed day. The service also runs fine by hand, which is the better way to watch the first few syncs. A dry run, which copies to staging and runs the checks but never swaps, is the service called with --once --dry-run.
+
+To build a fresh bundle with the newest FEX, Edge stable, and Chromium:
+
+```bash
+$ ./packaging/build-bundle.sh
+```
+
+The build runs on an arm64 Ubuntu build machine and is the only place a package manager is touched, and there only to download .deb files into a scratch directory. .github/workflows/build-bundle.yml wraps the same script for scheduled rebuilds. It is a scaffold: the script is tested, the workflow has not run in CI yet.
 
 ## Repository layout
 
 ```text
 edge-arm-bridge/
 |-- findings/     # investigation notes and test records
-|-- setup/        # host setup script and the experimental sign-in Containerfile
+|-- packaging/    # bundle build script, sysroot walker, and the bundle's own scripts
+|-- setup/        # earlier host setup script, superseded by packaging/
 |-- src/          # the .NET 11 sync service
 |-- systemd/      # user service and daily timer
 |-- tools/        # profile probe used by the decrypt check

@@ -107,3 +107,60 @@ The sync service in src/ was built with the .NET SDK 11.0.100-rc.3 on this board
 - Full run, wrong secret: exit 3 (decrypt check failed), target left untouched
 
 That is the finding 4 failure, caught by the service before a swap instead of by a user after one.
+
+## Round two, same day: the bundle, no package manager on the user's machine
+
+Direction change: drop Podman from the testing, and drop the apt-on-Ubuntu versus dnf-on-Fedora problem with it. The new shape is one tar. The tar carries extracted binaries for FEX and Edge, a trimmed x86-64 sysroot, an arm64 Chromium, and the sync service. A user untars it and runs a script. A build script on a build machine does the downloading and extracting, and a workflow can rebuild the tar on a schedule so the versions inside stay current.
+
+## Finding 10: FEX runs fine extracted, never installed
+
+The FEX GitHub release FEX-2611 carries no binary assets at all, so the binary source is the PPA .deb: fex-emu-armv8.2_2611-1~n_arm64.deb, 3,382,712 bytes, downloaded straight from ppa.launchpadcontent.net. Extracted with dpkg-deb -x, the tree is 20 MB.
+
+The part that matters: /usr/bin/FEX and /usr/bin/FEXServer link only libc, libstdc++, libm, and libgcc. The long Depends list on the .deb (Qt5, zenity, squashfuse) belongs to FEXConfig and the rootfs fetcher, not to the emulator. The bundle drops those two binaries and the Qt question goes with them.
+
+Test: staged FEX from the extracted tree, on PATH, against the board's existing rootfs and Edge 155. Headless about:blank and https://example.com both rendered, exit 0. FEXServer starts from the sibling binary without an install.
+
+## Finding 11: latest has already moved. The pairing rule is not optional
+
+The board's Edge is 155.0.4283.45-1. The Microsoft pool's newest stable on November 8, 2026 is 157.0.4341.42-1, a 201,183,074 byte .deb. Chrome for Testing's latest stable the same day is 157.0.8103.38. The majors pair up again at 157, and that pairing is luck each cycle, so build-bundle.sh reads both versions at build time and fails the build if the majors differ, rather than shipping a bundle the version gate in the sync service would refuse to use.
+
+## Finding 12: a trimmed sysroot is 750 MB, and 680 MB of it is Edge
+
+The full FEX rootfs on this board is 2.9 GB: 1.4 GB of usr/lib, 392 MB of var, 287 MB of usr/bin, and Edge itself at 651 MB. Walking the DT_NEEDED closure from the Edge binaries through the rootfs libraries resolves 117 entries and produces a sysroot of 746 MB, of which the extracted Edge 157 tree is 680 MB. Everything else Edge needs to start fits in roughly 70 MB.
+
+Three lessons from that walk, each paid for once:
+
+- The sysroot is usr-merged or FEX rejects it. /lib must be a symlink to usr/lib and the loader must answer at /lib64/ld-linux-x86-64.so.2. Without that, FEX prints 'Invalid or Unsupported elf file' and 'misconfigured x86-64 RootFS'.
+- DT_NEEDED is necessary and not sufficient. NSS dlopens libsoftokn3.so and friends at startup, and a miss there is a FATAL abort in nss_util.cc, not a loader error. GTK, gdk-pixbuf, pango, and gio load whole module directories by path. mk-sysroot.py seeds both lists by name.
+- Qt sonames (libQt5Core, libQt6Core, and family) show up in the closure from Edge helper libraries and resolve nowhere, including in the full rootfs. Edge runs without them in every test here. The walker reports them and moves on.
+
+Result: staged FEX, trimmed sysroot, Edge 157, https://example.com rendered, exit 0, no loader errors, no FATAL lines.
+
+## Finding 13: the sysroot builds from downloaded .debs alone, no installed rootfs
+
+The release build cannot depend on a rootfs somebody built by hand, so the same sysroot was rebuilt with a scratch apt state (it's own lists and cache under the build directory, system apt untouched) against Ubuntu noble amd64 plus the Microsoft repo. apt-cache depends --recurse on microsoft-edge-stable returns 228 packages. Filtered to library packages plus a short extras list, 176 packages downloaded, about 182 MB of .debs, 302 MB extracted.
+
+The filter is where the traps are:
+
+- Providers do not all start with 'lib'. zlib1g ships libz.so.1, and the first pool build died on exactly that: 'libz.so.1: cannot open shared object file'. The extras list now names zlib1g, dash, mesa-libgallium, xkb-data, shared-mime-info, fontconfig, and ca-certificates.
+- The pool is usr-merged in a different shape than the installed rootfs (the loader sits at usr/lib64 in the pool). mk-sysroot.py normalizes the layout instead of copying it, which is why finding 12's /lib symlink rule is in the script and not in this paragraph only.
+- etc/nsswitch.conf comes from no library package. The script writes a three-line one.
+
+Result: pool-built sysroot, 784 MB with the mesa and xkb data included. Staged FEX and Edge 157 rendered https://example.com, exit 0. The chain from .deb downloads to a running Edge never installs a package and never touches the host's apt state.
+
+## Finding 14: the assembled bundle, untarred cold, works
+
+A bundle was assembled the way build-bundle.sh assembles it: FEX tree 20 MB, sysroot from finding 13, Chrome for Testing 157.0.8103.38 arm64 (203 MB zip, 407 MB extracted), the bridge service as a self-contained linux-arm64 publish (87 MB with the runtime, .pdb files stripped in real builds), tools, install scripts, and VERSIONS.txt. 1.3 GB untarred. The tar.gz is 555,266,935 bytes.
+
+Cold test, scratch HOME, nothing pre-installed from the project:
+
+- install.sh: exit 0. It ldd-checks the FEX and Chromium binaries against host libraries, writes config.json with the untarred bundle's real paths, and writes the systemd user units with the bundle path filled in.
+- The untarred FEX, sysroot, and Edge 157, pointed at the fresh profile directory install.sh created: rendered https://example.com, exit 0, and Edge created it's own profile files in that directory (Default/Login Data present after the run).
+
+What install.sh does not do is install host libraries. FEX and Chromium link a short list of host libraries (libstdc++ and the graphics stack). A desktop has them. Where they are missing, install.sh names them and stops. That is the honest edge of 'no package manager': the bundle carries everything that is project's to carry, and says plainly what it cannot.
+
+## Finding 15: what is left on the host, and what is still untested
+
+Left on the host by design: a glibc, a desktop session with an unlocked keyring (finding 3), systemd user services for the daily timer, and python3 for the profile probe. The bundle binaries are Ubuntu noble builds. Fedora arm64 is also glibc, and the ldd check is the test that decides it machine by machine. Fedora itself is untested: nobody has untarred this bundle on a Fedora host yet.
+
+Still untested in this round: a headed Wayland run from the bundle sysroot (the GTK and thunk surface is seeded, not proven), the GitHub workflow in .github/workflows/build-bundle.yml (scaffold, mirrors the tested build script), and a rebuild cycle against a real new Edge major.
