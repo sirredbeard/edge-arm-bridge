@@ -50,6 +50,10 @@ Service. A systemd user timer wakes Edge every 6 hours, gives it 5 minutes to sy
 $ ~/.local/opt/edge-arm-bridge/edge-arm-bridge.sh --service
 ```
 
+Two notes. A release published before it's build finishes has a short window with no bundle asset on it, and --install in that window says so: publish as a draft, let the build attach the bundle, then publish. And --install also accepts a local bundle through EDGE_ARM_BRIDGE_TARBALL, which is how the project's own tests run it.
+
+Fresh bundles are built by GitHub Actions on every release, from the newest FEX and Edge stable of that day. The mirror target can be any Chromium-family browser on the system: set chromiumBinaryPath in config.json (the board this was built on uses /usr/bin/google-chrome, Google's arm64 build, since Ubuntu's chromium is snap-only there).
+
 By hand, when wanted: --sync mirrors once, --wake runs one wake-and-mirror. A dry run of the mirror, which copies to staging and runs the checks but never swaps, is the service in the bundle called with --once --dry-run.
 
 To build a fresh bundle with the newest FEX, Edge stable, and Chromium:
@@ -58,7 +62,7 @@ To build a fresh bundle with the newest FEX, Edge stable, and Chromium:
 $ ./packaging/build-bundle.sh
 ```
 
-The build runs on an arm64 Ubuntu build machine and is the only place a package manager is touched, and there only to download .deb files into a scratch directory. .github/workflows/build-bundle.yml wraps the same script for scheduled rebuilds. It is a scaffold: the script is tested, the workflow has not run in CI yet.
+The build runs on an arm64 Ubuntu build machine and is the only place a package manager is touched, and there only to download .deb files into a scratch directory. .github/workflows/build-bundle.yml wraps the same script and runs it on every release, attaching the fresh bundle to that release.
 
 ## Repository layout
 

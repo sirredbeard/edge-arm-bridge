@@ -212,3 +212,25 @@ Bundle v2 as assembled for the test: 749 MB untarred (against 1.3 GB for v1, the
 - Wake-and-mirror by hand: Edge woke headless from the squashfs image, built a fresh profile's worth of files, took the scope stop, and the mirror copied the profile to the Chromium directory and wrote it's marker file. status.json: synced, exit 0. A brand-new profile has no Login Data yet (no password has ever been saved in it), and the probe reported 0 logins rather than inventing a problem.
 
 Addendum, after publishing: release v0.1.0 is live with the tar, it's sha256, and edge-arm-bridge.sh as assets. The uploaded tar was downloaded back through gh and the sha256 matches the local build (4f57225d...). One catch, recorded rather than fixed: this repo is private, and GitHub does not serve release assets to anonymous requests, so the curl one-liner returns 404 without a token today. The script's own --install uses the same public URL. Making the one-liner work for anyone means either making the repo public, or teaching --install to use an authenticated download (gh or a token in the URL's place). That is a decision about the repo, not a bug in the bundle, and it is left to the repo owner.
+
+## Round four, same day: public repo, a system Chromium, and CI builds on release
+
+## Finding 20: the repo is public, and the one-liner works as written
+
+At the repo owner's direction the repo went public. The anonymous download that returned 404 in the round three addendum now returns the asset, and the full line was run on the board for real: curl the script, bash --install, the newest release tar comes down, the checksum verifies, the bundle installs into ~/.local/opt/edge-arm-bridge. Exit 0.
+
+## Finding 21: on this board, system Chromium means Google Chrome, and the versions line up on their own
+
+Ubuntu noble on arm64 offers chromium-browser only as a snap transitional package, and this board has no snap at all (no snap command, snapd inactive). The working system install is Google's own arm64 .deb of google-chrome-stable, which is the Chromium codebase with Google's branding and the same profile format. The copy installed here reports 157.0.8103.38: the same version as the Chrome for Testing build the bundle carries, because both come off the same release. The mirror config on the board now names /usr/bin/google-chrome as the target browser, with the target profile in a test directory. A wake-and-mirror cycle against it wrote 'synced, exit 0', and google-chrome opened the mirrored profile headless without complaint.
+
+For other machines: any Chromium-family binary works as the target (chromiumBinaryPath in config.json). The version gate pairs majors between the Edge profile and the target browser, so a distribution Chromium a major behind Edge will trip exit code 6 until it catches up. That is the gate doing it's job.
+
+## Finding 22: GitHub Actions builds the bundle on release, in about three minutes
+
+The workflow runs on ubuntu-24.04-arm, sets up .NET 11, adds the FEX PPA for download only, installs squashfs-tools and patchelf, and calls packaging/build-bundle.sh, the same script tested locally. It then uploads the tar, it's sha256, and edge-arm-bridge.sh to the release with --clobber. Triggers: a release being published, or a manual dispatch naming a tag.
+
+Two runs against v0.1.0, both success (runs 42546536610 and 42546926837). The CI bundle picked the same latest versions as the local build (FEX 2611, Edge 157.0.4341.42, Chrome for Testing 157.0.8103.38) and came out at 454 MB against the local 472 MB, the difference being gzip's default level against a -1 used by hand. The board was then wiped to the CI bundle through the public curl line, and a wake-and-mirror cycle ran clean on it.
+
+One real bug was found and fixed between the two runs: the first CI checksum file named the tar by it's absolute build path, so sha256sum -c on a user's machine would have looked for a file that does not exist there and failed the install at the verify step. build-bundle.sh now writes the checksum with the plain filename. Worth remembering as the general shape of CI-only bugs: the build was fine, the artifact's paperwork was not, and only an end-to-end install from the release caught it.
+
+The remaining flow note: --install always takes the newest published release, so a release published before it's workflow finishes has a short window with no bundle asset on it. Publish as a draft, let the build attach the bundle, then publish. The workflow file says the same.
