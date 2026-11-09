@@ -274,3 +274,7 @@ The settings app (src/EdgeArmBridge.Configurator, GirCore Gtk-4.0 bindings) publ
 ## Finding 30: the package set installs clean on the real Azure Linux desktop userland
 
 The acceptance test ran inside the Azure Linux desktop's own ARM live rootfs (CI run 42563762250 of sirredbeard/azurelinux-desktop, imported as a container image): dnf installed all five packages with no dependency work, the image parts joined to the expected hash, FEX executed, the sync service ran, and every library the configurator needs resolved. A plain Fedora 45 container passes the same checks. The azurelinux-desktop canary container was not usable for this test on the board: it composes an x86_64 userland by design, and its package set does not resolve for aarch64.
+
+## Finding 31: the bundle build takes its output directory from BUILD_DIR and ignores positional arguments
+
+The first two runs of the Pages workflow failed at the RPM step with "no Edge image" because the workflow passed the output directory as an argument and mounted the path it expected. build-bundle.sh never reads its arguments: BUILD comes from the BUILD_DIR environment variable, defaulting to build/ inside the repo, and the staging tree is $BUILD/bundle. The workflow now sets BUILD_DIR and mounts dist/bundle. Worth writing down because the failure looks like a packaging bug and is not: the bundle was built correctly both times, in a directory nothing was watching.
