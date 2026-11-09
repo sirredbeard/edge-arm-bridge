@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Microsoft Edge
+Comment=Microsoft Edge running under FEX. Sign in here; Edge Sync mirrors the profile to Chromium.
+Exec=/usr/bin/edge-arm-bridge-edge %U
+Icon=microsoft-edge
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupWMClass=Microsoft-edge
+Keywords=web;browser;internet;

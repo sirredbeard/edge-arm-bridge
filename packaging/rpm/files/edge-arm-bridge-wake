@@ -1,0 +1,28 @@
+#!/bin/sh
+# Wake Edge headless under FEX for a short dwell so Microsoft sync lands
+# in the profile, stop it clean, then mirror. The user timer runs this.
+set -eu
+. /usr/lib/edge-arm-bridge/ensure-config.sh
+edge_arm_bridge_ensure_config
+WAKE_SECONDS="${EDGE_ARM_BRIDGE_WAKE_SECONDS:-}"
+if [ -z "$WAKE_SECONDS" ] && [ -f "$HOME/.config/edge-arm-bridge/wake-seconds" ]; then
+    WAKE_SECONDS="$(cat "$HOME/.config/edge-arm-bridge/wake-seconds")"
+fi
+WAKE_SECONDS="${WAKE_SECONDS:-300}"
+if pgrep -f "user-data-dir=$EAB_DATA/edge-profile" >/dev/null 2>&1; then
+    echo "wake: Edge already runs on this profile, skipping the wake"
+else
+    echo "wake: starting Edge headless for ${WAKE_SECONDS}s so sync can run"
+    systemd-run --user --scope --unit=edge-arm-bridge-wake-run \
+        -p "RuntimeMaxSec=$((WAKE_SECONDS + 30))" \
+        env FEX_ROOTFS="$EAB_ROOT/image/edge-image.squashfs" \
+        "$EAB_ROOT/fex/usr/bin/FEX" /opt/microsoft/msedge/msedge \
+        --user-data-dir="$EAB_DATA/edge-profile" \
+        --browser-subprocess-path=/opt/microsoft/msedge/msedge \
+        --headless=new --disable-gpu --no-sandbox --no-first-run about:blank &
+    sleep "$WAKE_SECONDS"
+    systemctl --user stop edge-arm-bridge-wake-run.scope 2>/dev/null || true
+    sleep 2
+fi
+echo "wake: mirroring to Chromium"
+exec /usr/bin/edge-arm-bridge-sync

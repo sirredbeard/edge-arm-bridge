@@ -1,0 +1,6 @@
+#!/bin/sh
+# Mirror the Edge profile to the Chromium profile once, now.
+set -eu
+. /usr/lib/edge-arm-bridge/ensure-config.sh
+edge_arm_bridge_ensure_config
+exec "$EAB_ROOT/bridge/EdgeArmBridge" --once --config "$EAB_CONFIG"

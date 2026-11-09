@@ -1,0 +1,20 @@
+#!/bin/sh
+# Open Microsoft Edge under FEX (the bundled build from this package).
+# First run is the sign-in step: log into the Microsoft account here and
+# the mirror picks the profile up on the next sync.
+set -eu
+. /usr/lib/edge-arm-bridge/ensure-config.sh
+edge_arm_bridge_ensure_config
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; then
+    echo "edge-arm-bridge-edge: no display found. Run it from a desktop session: signing in needs the real window." >&2
+    exit 1
+fi
+EDGE=/opt/microsoft/msedge/msedge
+export FEX_ROOTFS="$EAB_ROOT/image/edge-image.squashfs"
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    set -- --ozone-platform=wayland "$@"
+fi
+exec systemd-run --user --scope --quiet -p MemoryMax=6G -p MemorySwapMax=0 \
+    "$EAB_ROOT/fex/usr/bin/FEX" "$EDGE" --browser-subprocess-path="$EDGE" \
+    --no-sandbox --test-type --no-first-run --no-default-browser-check \
+    --user-data-dir="$EAB_DATA/edge-profile" "$@"

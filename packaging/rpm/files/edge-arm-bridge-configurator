@@ -1,0 +1,4 @@
+#!/bin/sh
+# Open Edge Sync Settings (the GTK configurator).
+set -eu
+exec /usr/lib/edge-arm-bridge/configurator/EdgeArmBridge.Configurator "$@"

@@ -250,3 +250,27 @@ The analyzers found exactly the expected problem class and nothing else. Three J
 The first AOT build compiled clean and then died at runtime the first time it wrote status.json: no metadata for System.Int64, then for System.Boolean, because a dictionary of object holds whatever runtime types land in it and the generated serializer knows none of them. The fix is typed records (StatusFile, StateFile) with the same snake_case JSON names, written by the same code paths. status.json comes out in the same shape as before, nulls omitted as before.
 
 The behavioral suite then passed end to end against the AOT binary, on the same synthetic profiles as round one: correct secret mirrors and exits 0 with decrypt_check passed in status.json, wrong secret exits 3 and does not swap, dry run exits 0 and swaps nothing. The lesson worth keeping is the order of events: build warnings said the code was AOT-clean, and it was, for compilation. Only running the real paths showed the dictionary problem. An AOT conversion is not done when it builds. It is done when the test suite passes against the native binary.
+
+## Finding 25: GitHub Pages caps one file at 100 MB, so the Edge image ships in parts
+
+The RPM stream follows the github-pages-rpm-repo template: a static DNF repository on GitHub Pages. Pages refuses any single file over 100 MB and caps the whole site at 1 GB. The Edge image is 219 MB as a squashfs and does not compress further, so one RPM holding it can never deploy. The image instead ships split across subpackages of at most 84 MB of payload each (three today). The main package requires every part, and its install script joins them back into the squashfs and checks the sha256 before anything uses it. The full set is about 227 MB, well inside the site cap.
+
+## Finding 26: %post runs before the rest of the transaction lands; %posttrans is the hook that sees everything
+
+The first RPM build joined the image parts in the main package's %post script. It produced no image and no useful error: in a multi-package transaction, each package's %post can run before sibling packages have laid their files down, and the main package sorts first. The fix is %posttrans, which runs once at the end of the transaction with every package in place. Assembly and hash checking live there now.
+
+## Finding 27: a stray dollar sign emptied the stored hash, and one check passed anyway because empty equals empty
+
+The generated spec wrote the expected image hash into the package from a placeholder token. The token kept a dollar sign in front of it, so the shell expanded it as a variable name and the installed hash file came out empty. Assembly then refused to run, correctly. The uncomfortable part is that one test round reported the image hash as matching: it compared a failed hash computation (empty output) against the empty file and called that a match. The check now asserts the assembled file exists and is not empty before any hash comparison. Verify the artifact, then verify its hash, in that order.
+
+## Finding 28: with a fixed install path, patch the FEX interpreter at build time
+
+The tar bundle patches the FEX interpreter at install time because its install path varies by user. An RPM always lands in /usr/lib/edge-arm-bridge, so the build patches the interpreter there ahead of time and no scriptlet touches the binaries. This route is also sturdier: the bundled arm64 loader, run inside a Fedora container to drive the bundled patchelf, dies with a bus error, while the build host's own patchelf does the job without drama. Install-time patching stays in the tar flow, where the path is not known until install.
+
+## Finding 29: the GTK configurator is also Native AOT, one 3.9 MB binary
+
+The settings app (src/EdgeArmBridge.Configurator, GirCore Gtk-4.0 bindings) publishes with the same AOT settings as the service: one native binary, no runtime, no IL warnings. It edits the same config file the service reads, opens the Edge sign-in window, runs a sync or a wake on request, shows the last sync result from status.json, and toggles the wake timer. GirCore generates its interop at build time, which is what keeps the AOT build clean.
+
+## Finding 30: the package set installs clean on the real Azure Linux desktop userland
+
+The acceptance test ran inside the Azure Linux desktop's own ARM live rootfs (CI run 42563762250 of sirredbeard/azurelinux-desktop, imported as a container image): dnf installed all five packages with no dependency work, the image parts joined to the expected hash, FEX executed, the sync service ran, and every library the configurator needs resolved. A plain Fedora 45 container passes the same checks. The azurelinux-desktop canary container was not usable for this test on the board: it composes an x86_64 userland by design, and its package set does not resolve for aarch64.

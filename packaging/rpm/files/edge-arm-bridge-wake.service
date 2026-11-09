@@ -1,0 +1,7 @@
+[Unit]
+Description=Wake Edge under FEX, let Microsoft sync land, then mirror the profile
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/edge-arm-bridge-wake

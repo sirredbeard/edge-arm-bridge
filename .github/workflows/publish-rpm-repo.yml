@@ -1,0 +1,108 @@
+# Build the bundle, package it as RPMs, and publish a DNF repository on
+# GitHub Pages, following the github-pages-rpm-repo template.
+#
+# The Pages site for this repo already exists (Source: GitHub Actions).
+# The stream is unsigned, so the client .repo file uses gpgcheck=0, the
+# template's honest default for a personal stream.
+#
+# The Edge image is about 219 MB and Pages serves one file up to 100 MB,
+# so packaging/rpm/build-rpm.sh splits it across subpackages. dnf pulls
+# them all as dependencies of the main package, which joins the parts
+# at install time.
+#
+# Create the release as a draft, dispatch this workflow with its tag,
+# then publish the release. Publishing also triggers a run.
+name: publish-rpm-repo
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to package (for example v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-rpm-repo
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-24.04-arm
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 11
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "11.0.x"
+
+      - name: Install bundle build tools
+        run: |
+          sudo add-apt-repository -y ppa:fex-emu/fex
+          sudo apt-get update -qq
+          sudo apt-get install -y software-properties-common squashfs-tools patchelf clang zlib1g-dev createrepo-c
+
+      - name: Build the bundle
+        run: packaging/build-bundle.sh "$GITHUB_WORKSPACE/dist"
+
+      - name: Publish the configurator
+        run: dotnet publish src/EdgeArmBridge.Configurator -c Release -r linux-arm64 -o "$GITHUB_WORKSPACE/dist/gui"
+
+      - name: Build the RPM set
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo" \
+            -v "$GITHUB_WORKSPACE/dist/edge-arm-bridge:/bundle:ro" \
+            -v "$GITHUB_WORKSPACE/dist/gui:/gui:ro" \
+            -v "$GITHUB_WORKSPACE/dist/rpms:/out" \
+            fedora:45 \
+            bash -c 'dnf -y -q install rpm-build squashfs-tools patchelf && /repo/packaging/rpm/build-rpm.sh --bundle /bundle --gui /gui --version "'"$version"'" --out /out'
+          ls -la dist/rpms
+          for rpm in dist/rpms/*.rpm; do
+            size=$(wc -c < "$rpm")
+            if [ "$size" -gt 100000000 ]; then
+              echo "$rpm is $size bytes, over the Pages per-file limit" >&2
+              exit 1
+            fi
+          done
+
+      - name: Stage the Pages site
+        run: |
+          set -euo pipefail
+          rm -rf site
+          mkdir -p site/repo
+          cp -a dist/rpms/*.rpm site/repo/
+          createrepo_c site/repo
+          find site/repo -maxdepth 1 -type f -name '*.rpm' -printf '%f\n' | sort > site/repo/manifest.txt
+          cp packaging/rpm/edge-arm-bridge.repo site/edge-arm-bridge.repo
+          export PAGES_OWNER="${{ github.repository_owner }}"
+          export PAGES_REPO="${{ github.event.repository.name }}"
+          ./scripts/generate-repo-index.sh site
+          test -f site/.nojekyll
+          test -f site/repo/repodata/repomd.xml
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

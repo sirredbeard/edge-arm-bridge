@@ -56,6 +56,17 @@ Fresh bundles are built by GitHub Actions on every release, from the newest FEX 
 
 By hand, when wanted: --sync mirrors once, --wake runs one wake-and-mirror. A dry run of the mirror, which copies to staging and runs the checks but never swaps, is the service in the bundle called with --once --dry-run.
 
+### From the RPM repository (Fedora, Azure Linux)
+
+On an RPM system there is nothing to untar and no script to run. The repository is a static DNF repo on GitHub Pages, following the github-pages-rpm-repo template:
+
+```bash
+$ sudo curl -fsSL https://sirredbeard.github.io/edge-arm-bridge/edge-arm-bridge.repo -o /etc/yum.repos.d/edge-arm-bridge.repo
+$ sudo dnf install edge-arm-bridge
+```
+
+The stream is unsigned, so the .repo file sets gpgcheck=0. Install puts the service, FEX, and the Edge image in /usr/lib/edge-arm-bridge and joins the image parts at install time (Pages caps one file at 100 MB, so the image ships split across subpackages that the main package pulls in). Two desktop entries land with it: Microsoft Edge, which opens the sign-in window under FEX, and Edge Sync Settings, a small GTK app that edits the same config, runs syncs, and toggles the six-hour wake timer. Profiles and config live in the user's home, same as the tar install. The bundled Chromium is not in the RPM set: point chromiumBinaryPath at the system Chromium or Chrome.
+
 To build a fresh bundle with the newest FEX, Edge stable, and Chromium:
 
 ```bash
@@ -69,10 +80,11 @@ The build runs on an arm64 Ubuntu build machine and is the only place a package 
 ```text
 edge-arm-bridge/
 |-- findings/     # investigation notes and test records
-|-- packaging/    # bundle build script, sysroot walker, and the bundle's own scripts
+|-- packaging/    # bundle build script, sysroot walker, the bundle scripts, and packaging/rpm for the RPM set
 |-- setup/        # earlier host setup script, superseded by packaging/
-|-- src/          # the .NET 11 sync service
+|-- src/          # the .NET 11 sync service and the GTK configurator app
 |-- systemd/      # user service and daily timer
+|-- scripts/      # Pages repo index generator, from the github-pages-rpm-repo template
 |-- tools/        # profile probe used by the decrypt check
 |-- LICENSE
 `-- README.md

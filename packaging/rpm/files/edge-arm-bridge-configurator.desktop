@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Edge Sync Settings
+Comment=Configure the Edge to Chromium profile mirror
+Exec=/usr/bin/edge-arm-bridge-configurator
+Icon=edge-arm-bridge-sync
+Categories=Settings;Network;
+Keywords=edge;sync;chromium;profile;

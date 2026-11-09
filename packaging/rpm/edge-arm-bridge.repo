@@ -1,0 +1,5 @@
+[edge-arm-bridge]
+name=Edge ARM Bridge (GitHub Pages)
+baseurl=https://sirredbeard.github.io/edge-arm-bridge/repo/
+enabled=1
+gpgcheck=0
