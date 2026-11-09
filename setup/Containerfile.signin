@@ -1,0 +1,14 @@
+# EXPERIMENTAL. Do not treat this as the supported path.
+#
+# The idea: one arm64 container carrying FEX and the amd64 Edge build, so a
+# user signs into a Microsoft profile inside the container and nothing else
+# needs installing. Test record in findings/ (finding 6): the FEX binary
+# starts in a plain rootless Podman container, FEXServer does not, and the
+# squashfs rootfs never mounts. Expect errors past that point.
+# Kept in the repo so the next person starts from the failure, not from zero.
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y software-properties-common curl gnupg && \
+    add-apt-repository -y ppa:fex-emu/fex && \
+    apt-get update && apt-get install -y fex-emu-armv8.2
+# Edge itself is fetched at first run from packages.microsoft.com, pinned in
+# setup.sh. No browser binary is baked into this image.

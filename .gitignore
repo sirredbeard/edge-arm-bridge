@@ -1,0 +1,25 @@
+# Browser profiles and anything copied from one. Never commit these.
+profiles/
+profile/
+*.profile/
+Local State
+Login Data
+Login Data For Account
+Cookies
+Web Data
+
+# Sync output
+status.json
+last-run.txt
+backups/
+staging/
+logs/
+
+# .NET
+bin/
+obj/
+*.user
+
+# Secrets
+*.secret
+.env

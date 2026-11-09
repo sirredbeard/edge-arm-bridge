@@ -1,0 +1,11 @@
+{
+  "edgeProfilePath": "/home/arduino/.config/microsoft-edge",
+  "chromiumProfilePath": "/home/arduino/.local/share/edge-arm-bridge/chromium-profile",
+  "chromiumBinary": "/home/arduino/chromium-arm64/chrome-linux-arm64/chrome",
+  "workDirectory": "/home/arduino/.local/share/edge-arm-bridge",
+  "edgeSafeStorageLabel": "Microsoft Edge Safe Storage",
+  "chromiumSafeStorageLabel": "Chrome Safe Storage",
+  "backupsToKeep": 3,
+  "staleSourceWarnHours": 48,
+  "probeScript": "/data/edge-arm-bridge/tools/probe_profile.py"
+}

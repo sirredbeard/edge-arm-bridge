@@ -1,0 +1,15 @@
+[Unit]
+Description=edge-arm-bridge profile sync (Edge under FEX to arm64 Chromium)
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+# The sync needs the unlocked desktop keyring, so it runs as a user service
+# inside the desktop session. A system service cannot read the Safe Storage
+# secrets and will fail with exit code 5. That is deliberate.
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+ExecStart=/usr/bin/dotnet /opt/edge-arm-bridge/EdgeArmBridge.dll --once --config %h/.config/edge-arm-bridge/config.json
+WorkingDirectory=%h/.local/share/edge-arm-bridge
+
+[Install]
+WantedBy=default.target

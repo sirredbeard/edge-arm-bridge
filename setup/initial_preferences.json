@@ -1,0 +1,17 @@
+{
+  "distribution": {
+    "skip_first_run_ui": true,
+    "show_welcome_page": false,
+    "make_chrome_default": false
+  },
+  "browser": {
+    "check_default_browser": false,
+    "custom_chrome_frame": false
+  },
+  "first_run": {
+    "restore_on_startup": 4
+  },
+  "ntp": {
+    "show_first_run_experience": false
+  }
+}
